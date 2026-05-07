@@ -43,7 +43,7 @@ Commands from Apple Home / Google Home are forwarded back via MQTT.
 ## Prerequisites
 
 - Python 3.11+ (or Docker)
-- Running [Ambientika MQTT Bridge](https://github.com/martinsaxalber-oss/ambientika-mqtt-bridge)
+- Running [Ambientika MQTT Bridge](https://github.com/ambientika-eu/ambientika-mqtt-bridge)
 - MQTT broker (e.g. Mosquitto)
 - [python-matter-server](https://github.com/home-assistant-libs/python-matter-server) running
 
@@ -54,7 +54,7 @@ matter-server and the Ambientika bridge together.
 
 ```bash
 # Clone the repo
-git clone https://github.com/martinsaxalber-oss/ambientika-mqtt-bridge.git
+git clone https://github.com/ambientika-eu/ambientika-mqtt-bridge.git
 cd ambientika-mqtt-bridge/matter-bridge
 
 # (Optional) Create .env for credentials
@@ -108,9 +108,9 @@ When the bridge starts for the first time and discovers Ambientika devices:
 
 1. Each unit is automatically commissioned as a virtual Matter node
 2. Open the **Home** app on iPhone/iPad
-3. Tap **+** → **Add Accessory** → **More Options**
+3. Tap **+** â **Add Accessory** â **More Options**
 4. The Ambientika unit appears as **Air Purifier**
-5. Add it to a room – done!
+5. Add it to a room â done!
 
 You can then control fan speed, check humidity/temperature and set automations
 directly in Apple Home.
@@ -118,14 +118,14 @@ directly in Apple Home.
 ## Google Home
 
 1. Open **Google Home** app
-2. Tap **+** → **Set up device** → **Matter**
+2. Tap **+** â **Set up device** â **Matter**
 3. The Ambientika unit will be discovered automatically
 4. Assign to a room
 
 ## Amazon Alexa
 
 1. Open **Amazon Alexa** app
-2. Go to **Devices** → **+** → **Add Device** → **Other**
+2. Go to **Devices** â **+** â **Add Device** â **Other**
 3. Enable Matter pairing mode
 4. Follow the on-screen instructions
 
@@ -146,7 +146,7 @@ directly in Apple Home.
 
 ## Related
 
-- [Main Repository](https://github.com/martinsaxalber-oss/ambientika-mqtt-bridge)
+- [Main Repository](https://github.com/ambientika-eu/ambientika-mqtt-bridge)
 - [Home Assistant Add-on](../ha-addon/)
 - [Homebridge Plugin](../homebridge-plugin/) (alternative for Apple Home)
 - [Node-RED Flow](../examples/node-red/)
@@ -154,4 +154,4 @@ directly in Apple Home.
 
 ## License
 
-MIT License – see [LICENSE](../LICENSE)
+MIT License â see [LICENSE](../LICENSE)

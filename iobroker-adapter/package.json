@@ -1,0 +1,49 @@
+{
+  "name": "iobroker.ambientika",
+  "version": "0.1.0",
+  "description": "ioBroker adapter for Ambientika ventilation units via MQTT",
+  "author": {
+    "name": "Ambientika / SUEDWIND",
+    "email": "info@ambientika.eu"
+  },
+  "homepage": "https://www.ambientika.eu",
+  "license": "MIT",
+  "keywords": [
+    "ioBroker",
+    "Ambientika",
+    "ventilation",
+    "MQTT",
+    "smart home",
+    "Lueftung"
+  ],
+  "main": "main.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node main.js"
+  },
+  "dependencies": {
+    "@iobroker/adapter-core": "^3.1.6",
+    "mqtt": "^5.3.4"
+  },
+  "devDependencies": {
+    "@iobroker/testing": "^4.1.3"
+  },
+  "ioBroker": {
+    "type": "other",
+    "icon": "admin/ambientika.png",
+    "adminTab": false,
+    "schedule": null,
+    "mode": "daemon",
+    "readme": "https://github.com/martinsaxalber-oss/ambientika-mqtt-bridge/blob/main/iobroker-adapter/README.md",
+    "loglevel": "info",
+    "messagebox": false,
+    "compact": false,
+    "datapoints": 15
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/martinsaxalber-oss/ambientika-mqtt-bridge.git"
+  }
+}

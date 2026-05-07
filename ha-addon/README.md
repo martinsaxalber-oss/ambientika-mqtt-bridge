@@ -12,7 +12,7 @@ With this add-on, you can install the Ambientika MQTT Bridge directly from the H
 2. Click the **three-dot menu** (top right) > **Repositories**
 3. Add this URL:
    ```
-   https://github.com/martinsaxalber-oss/ambientika-mqtt-bridge
+      https://github.com/ambientika-eu/ambientika-mqtt-bridge
    ```
 4. Click **Add**, then close the dialog
 5. Search for **"Ambientika MQTT Bridge"** in the store

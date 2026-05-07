@@ -109,7 +109,7 @@ While waiting for HACS/store approval, users can install via:
 ```yaml
 # In Home Assistant configuration.yaml:
 # Settings → Add-ons → Add-on Store → ⋮ → Repositories
-# Add: https://github.com/martinsaxalber-oss/ambientika-ha-addon
+# Add: https://github.com/ambientika-eu/ambientika-mqtt-bridge
 ```
 
 This gives users immediate access before the official submission is approved.

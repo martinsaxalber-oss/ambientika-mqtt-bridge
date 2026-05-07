@@ -1,0 +1,8 @@
+{
+  "name": "Ambientika MQTT Bridge",
+  "description": "MQTT bridge for Ambientika ventilation units – connects to Home Assistant, Apple Home, Google Home, Alexa",
+  "homeassistant": "2023.1.0",
+  "render_readme": true,
+  "content_in_root": false,
+  "filename": "ambientika_bridge.py"
+}

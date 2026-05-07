@@ -28,7 +28,7 @@ npm install -g homebridge-ambientika
 ## Step 2: Clone and Prepare
 
 ```bash
-git clone https://github.com/martinsaxalber-oss/ambientika-mqtt-bridge.git
+git clone https://github.com/ambientika-eu/ambientika-mqtt-bridge.git
 cd ambientika-mqtt-bridge/homebridge-plugin
 npm install
 ```
@@ -48,10 +48,10 @@ npm login
 ## Step 4: Verify package before publishing
 
 ```bash
-# Dry run – shows what would be published without actually publishing
+# Dry run â shows what would be published without actually publishing
 npm publish --dry-run
 
-# Check the output – you should see these files:
+# Check the output â you should see these files:
 # src/index.js
 # package.json
 # README.md
@@ -79,11 +79,11 @@ After publishing to npm, submit the plugin to the verified Homebridge plugin lis
 3. Open a PR to add `homebridge-ambientika` to the verified list
 
 **Verification requirements:**
-- Plugin must be published on npm ✅ (after Step 5)
-- `homebridge-plugin` keyword in package.json ✅
-- Valid README with install instructions ✅
-- Uses `homebridge` peerDependency ✅
-- GitHub repo is public ✅
+- Plugin must be published on npm â (after Step 5)
+- `homebridge-plugin` keyword in package.json â
+- Valid README with install instructions â
+- Uses `homebridge` peerDependency â
+- GitHub repo is public â
 
 ---
 
@@ -91,9 +91,9 @@ After publishing to npm, submit the plugin to the verified Homebridge plugin lis
 
 ```bash
 # Bump version (patch = bug fix, minor = new feature, major = breaking change)
-npm version patch   # e.g. 1.0.0 → 1.0.1
-npm version minor   # e.g. 1.0.1 → 1.1.0
-npm version major   # e.g. 1.1.0 → 2.0.0
+npm version patch   # e.g. 1.0.0 â 1.0.1
+npm version minor   # e.g. 1.0.1 â 1.1.0
+npm version major   # e.g. 1.1.0 â 2.0.0
 
 # Publish new version
 npm publish --access public

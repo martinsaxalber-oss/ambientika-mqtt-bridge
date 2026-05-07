@@ -1,17 +1,33 @@
 {
   "name": "homebridge-ambientika",
   "version": "1.0.0",
+  "displayName": "Ambientika",
   "description": "Homebridge plugin for Ambientika ventilation units – Apple Home, Google Home, Amazon Alexa",
   "license": "MIT",
+  "author": {
+    "name": "Ambientika / SUEDWIND",
+    "email": "info@ambientika.eu",
+    "url": "https://www.ambientika.eu"
+  },
+  "homepage": "https://github.com/martinsaxalber-oss/ambientika-mqtt-bridge/blob/main/homebridge-plugin/README.md",
+  "bugs": {
+    "url": "https://github.com/martinsaxalber-oss/ambientika-mqtt-bridge/issues"
+  },
   "keywords": [
     "homebridge-plugin",
     "ambientika",
     "ventilation",
     "homekit",
     "apple-home",
+    "google-home",
+    "alexa",
     "heat-recovery",
     "lüftung",
-    "suedwind"
+    "hrv",
+    "suedwind",
+    "smart-home",
+    "fan",
+    "air-quality"
   ],
   "main": "src/index.js",
   "engines": {
@@ -19,6 +35,7 @@
     "homebridge": ">=1.6.0"
   },
   "scripts": {
+    "prepublishOnly": "node -e \"console.log('Publishing homebridge-ambientika...')\"",
     "test": "node src/index.js --test"
   },
   "dependencies": {
@@ -33,7 +50,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/martinsaxalber-oss/ambientika-mqtt-bridge.git"
+    "url": "https://github.com/martinsaxalber-oss/ambientika-mqtt-bridge.git",
+    "directory": "homebridge-plugin"
   },
-  "homepage": "https://github.com/martinsaxalber-oss/ambientika-mqtt-bridge/tree/main/homebridge-plugin"
+  "funding": {
+    "type": "url",
+    "url": "https://www.ambientika.eu"
+  }
 }

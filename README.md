@@ -16,7 +16,7 @@
 | **Google Home** | Homebridge plugin / Matter | `homebridge-plugin/` · `matter-bridge/` | ✅ Ready |
 | **Amazon Alexa** | Homebridge plugin / Matter | `homebridge-plugin/` · `matter-bridge/` | ✅ Ready |
 | **Node-RED** | Example flow | `examples/node-red/` | ✅ Ready |
-| **Loxone** | MQTT Virtual I/O guide | `examples/loxone/` | ✅ Ready |
+| **Loxone** | MQTT Virtual I/O guide | `examples/loxone/` | ✅ Ready |h
 | **ioBroker** | Native adapter | `iobroker-adapter/` | ✅ Ready |
 | **SmartThings** | Matter Bridge | `matter-bridge/` | ✅ Ready |
 | **openHAB** | MQTT Binding (generic) | See README | 📖 Guide |
@@ -27,7 +27,7 @@
 ## Quick Start
 
 ```bash
-git clone https://github.com/martinsaxalber-oss/ambientika-mqtt-bridge.git
+git clone https://github.com/ambientika-eu/ambientika-mqtt-bridge.git
 cd ambientika-mqtt-bridge
 cp .env.example .env
 # Edit .env with your Ambientika credentials and MQTT broker settings
@@ -37,7 +37,6 @@ docker compose up -d
 ---
 
 ## Architecture
-
 ```
 Ambientika Device (WiFi)
        |  (HTTPS/WebSocket)

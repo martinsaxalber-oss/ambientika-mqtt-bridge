@@ -1,0 +1,18 @@
+ambientika:
+  username: "ihre@email.de"
+  password: "ihrpasswort"
+  host: "https://app.ambientika.eu:4521"
+
+mqtt:
+  host: "localhost"
+  port: 1883
+  username: ""
+  password: ""
+  tls: false
+
+bridge:
+  topic_prefix: "ambientika"
+  discovery_prefix: "homeassistant"
+  enable_discovery: true
+  poll_interval: 30
+  log_level: "INFO"

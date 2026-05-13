@@ -1,0 +1,81 @@
+name: Smoke test (build + import check)
+
+# Builds all three Docker images and verifies that the ambientika_py
+# library, including the LightSensorLevel class, can be imported.
+# This catches the class of error reported in issue #1 before it can
+# reach end users.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**/Dockerfile"
+      - "**/requirements.txt"
+      - "**/*.py"
+      - ".github/workflows/smoke-test.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "**/Dockerfile"
+      - "**/requirements.txt"
+      - "**/*.py"
+      - ".github/workflows/smoke-test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-import:
+    name: Build & import check (${{ matrix.image.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - name: root (Debian)
+            dockerfile: Dockerfile
+            context: .
+            tag: ambientika-bridge:root
+          - name: ha-addon (Alpine)
+            dockerfile: ha-addon/Dockerfile
+            context: ha-addon
+            tag: ambientika-bridge:ha-addon
+          - name: ambientika_mqtt_bridge slug (Alpine)
+            dockerfile: ambientika_mqtt_bridge/Dockerfile
+            context: ambientika_mqtt_bridge
+            tag: ambientika-bridge:slug
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (${{ matrix.image.name }})
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.image.context }}
+          file: ${{ matrix.image.dockerfile }}
+          push: false
+          load: true
+          tags: ${{ matrix.image.tag }}
+
+      - name: Import check - LightSensorLevel and friends
+        run: |
+          docker run --rm --entrypoint python "${{ matrix.image.tag }}" -c "
+          import sys
+          print('Python:', sys.version)
+
+          # The original bug: this import must succeed.
+          from ambientika_py import LightSensorLevel
+          print('OK: LightSensorLevel =', LightSensorLevel)
+
+          # Verify other runtime deps used by bridge.py resolve too.
+          import paho.mqtt.client
+          import yaml
+          import aiohttp
+          import returns
+          print('OK: paho.mqtt, yaml, aiohttp, returns all importable')
+          "

@@ -1,7 +1,10 @@
 ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base:latest
+FROM $BUILD_FROM
+
+# Re-declare build-time ARGs inside the build stage so they are available
+# to LABEL and other instructions after FROM (Docker scoping rule).
 ARG BUILD_ARCH
 ARG BUILD_VERSION
-FROM $BUILD_FROM
 
 LABEL \
     io.hass.name="Ambientika MQTT Bridge" \

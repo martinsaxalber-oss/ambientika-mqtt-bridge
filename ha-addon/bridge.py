@@ -46,10 +46,15 @@ log = logging.getLogger("ambientika_bridge")
 # ---------------------------------------------------------------------------
 
 def _env(*names: str, default: str = "") -> str:
-    """Return the first non-empty env var among 'names'."""
+    """Return the first non-empty env var among 'names'.
+
+    Treats the literal strings 'null' and 'None' as empty, because
+    HA's bashio::config returns the string "null" for optional fields
+    that are not set in options.json.
+    """
     for n in names:
         v = os.environ.get(n)
-        if v:
+        if v and v.lower() not in ("null", "none"):
             return v
     return default
 

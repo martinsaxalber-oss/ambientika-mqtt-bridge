@@ -1,0 +1,35 @@
+ARG BUILD_FROM
+FROM $BUILD_FROM
+
+LABEL \
+  io.hass.name="Ambientika MQTT Bridge" \
+  io.hass.description="MQTT bridge for Ambientika ventilation units" \
+  io.hass.arch="${BUILD_ARCH}" \
+  io.hass.type="addon" \
+  io.hass.version="${BUILD_VERSION}" \
+  maintainer="Ambientika / SUEDWIND"
+
+# Install Python plus build tools needed for aiohttp / yarl / multidict on ARM
+RUN apk add --no-cache \
+      python3 \
+      py3-pip \
+      gcc \
+      musl-dev \
+      python3-dev \
+      libffi-dev \
+      openssl-dev \
+      cargo \
+      make
+
+# Install bridge dependencies (PEP 668: system Python is externally managed)
+COPY requirements.txt /tmp/requirements.txt
+RUN pip3 install --no-cache-dir --break-system-packages -r /tmp/requirements.txt
+
+# Copy bridge script
+COPY bridge.py /app/bridge.py
+
+# Copy startup script
+COPY run.sh /run.sh
+RUN chmod +x /run.sh
+
+CMD [ "/run.sh" ]

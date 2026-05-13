@@ -4,6 +4,11 @@ name: Smoke test (build + import check)
 # library, including the LightSensorLevel class, can be imported.
 # This catches the class of error reported in issue #1 before it can
 # reach end users.
+#
+# Note: ha-addon and ambientika_mqtt_bridge use the Home Assistant
+# add-on build convention with ARG BUILD_FROM. In a real HA install
+# the Supervisor injects this base image. For our smoke test we pass
+# the official HA amd64 Alpine base directly.
 
 on:
   push:
@@ -37,14 +42,19 @@ jobs:
             dockerfile: Dockerfile
             context: .
             tag: ambientika-bridge:root
+            build_args: ""
           - name: ha-addon (Alpine)
             dockerfile: ha-addon/Dockerfile
             context: ha-addon
             tag: ambientika-bridge:ha-addon
+            build_args: |
+              BUILD_FROM=ghcr.io/home-assistant/amd64-base:latest
           - name: ambientika_mqtt_bridge slug (Alpine)
             dockerfile: ambientika_mqtt_bridge/Dockerfile
             context: ambientika_mqtt_bridge
             tag: ambientika-bridge:slug
+            build_args: |
+              BUILD_FROM=ghcr.io/home-assistant/amd64-base:latest
 
     steps:
       - name: Checkout
@@ -61,6 +71,7 @@ jobs:
           push: false
           load: true
           tags: ${{ matrix.image.tag }}
+          build-args: ${{ matrix.image.build_args }}
 
       - name: Import check - LightSensorLevel and friends
         run: |

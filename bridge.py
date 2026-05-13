@@ -1,48 +1,63 @@
 #!/usr/bin/env python3
 """
 Ambientika MQTT Bridge
-Connects Ambientika Cloud API to any MQTT broker.
-Home Assistant Auto-Discovery | ioBroker | openHAB | Loxone | Node-RED
+
+Connects the Ambientika Cloud API to any MQTT broker.
+Supports Home Assistant Auto-Discovery as well as ioBroker, openHAB,
+Loxone and Node-RED (any MQTT-capable system).
+
+Built on top of the community library 'ambientika_py' by wingertge.
 """
+
 import asyncio
 import json
 import logging
 import os
 import signal
 import sys
-from typing import Optional
+from typing import Any, Optional
 
 import paho.mqtt.client as mqtt
 import yaml
 
 try:
     from ambientika_py import (
-        AmbientikaAPI,
+        authenticate,
+        Ambientika,
         Device,
-    )
-    from ambientika_py.models import (
         OperatingMode,
         FanSpeed,
         HumidityLevel,
+        LightSensorLevel,
     )
-except ImportError:
-    print("ERROR: ambientika_py not installed. Run: pip install ambientika_py")
+    from returns.result import Success, Failure
+except ImportError as exc:
+    print(
+        "ERROR: required dependency missing. "
+        "Run: pip install -r requirements.txt  ({})".format(exc)
+    )
     sys.exit(1)
 
 log = logging.getLogger("ambientika_bridge")
 
 
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+
 class BridgeConfig:
-    def __init__(self):
+    def __init__(self) -> None:
         self.username = ""
         self.password = ""
         self.host = "https://app.ambientika.eu:4521"
+
         self.mqtt_host = "localhost"
         self.mqtt_port = 1883
         self.mqtt_user = ""
         self.mqtt_pass = ""
         self.mqtt_client_id = "ambientika-bridge"
         self.mqtt_tls = False
+
         self.topic_prefix = "ambientika"
         self.discovery_prefix = "homeassistant"
         self.enable_discovery = True
@@ -52,222 +67,424 @@ class BridgeConfig:
     @classmethod
     def from_yaml(cls, path: str) -> "BridgeConfig":
         with open(path) as f:
-            raw = yaml.safe_load(f)
+            raw = yaml.safe_load(f) or {}
         cfg = cls()
-        amb = raw.get("ambientika", {})
-        cfg.username = os.environ.get("AMBIENTIKA_USER", amb.get("username", ""))
-        cfg.password = os.environ.get("AMBIENTIKA_PASS", amb.get("password", ""))
+
+        amb = raw.get("ambientika", {}) or {}
+        cfg.username = os.environ.get("AMBIENTIKA_USER", amb.get("username", "")) or ""
+        cfg.password = os.environ.get("AMBIENTIKA_PASS", amb.get("password", "")) or ""
         cfg.host = amb.get("host", cfg.host)
-        mq = raw.get("mqtt", {})
+
+        mq = raw.get("mqtt", {}) or {}
         cfg.mqtt_host = os.environ.get("MQTT_HOST", mq.get("host", cfg.mqtt_host))
         cfg.mqtt_port = int(os.environ.get("MQTT_PORT", mq.get("port", cfg.mqtt_port)))
-        cfg.mqtt_user = os.environ.get("MQTT_USER", mq.get("username", ""))
-        cfg.mqtt_pass = os.environ.get("MQTT_PASS", mq.get("password", ""))
-        cfg.mqtt_tls = mq.get("tls", False)
-        br = raw.get("bridge", {})
+        cfg.mqtt_user = os.environ.get("MQTT_USER", mq.get("username", "")) or ""
+        cfg.mqtt_pass = os.environ.get("MQTT_PASS", mq.get("password", "")) or ""
+        cfg.mqtt_tls = bool(mq.get("tls", False))
+
+        br = raw.get("bridge", {}) or {}
         cfg.topic_prefix = br.get("topic_prefix", cfg.topic_prefix)
         cfg.discovery_prefix = br.get("discovery_prefix", cfg.discovery_prefix)
-        cfg.enable_discovery = br.get("enable_discovery", True)
+        cfg.enable_discovery = bool(br.get("enable_discovery", True))
         cfg.poll_interval = int(br.get("poll_interval", cfg.poll_interval))
         cfg.log_level = br.get("log_level", cfg.log_level)
         return cfg
 
+    @classmethod
+    def from_ha_options(cls, path: str) -> "BridgeConfig":
+        with open(path) as f:
+            raw = json.load(f)
+        cfg = cls()
+        cfg.username = os.environ.get("AMBIENTIKA_USER", raw.get("ambientika_user", "")) or ""
+        cfg.password = os.environ.get("AMBIENTIKA_PASS", raw.get("ambientika_pass", "")) or ""
+        cfg.host = raw.get("ambientika_host", cfg.host)
+        cfg.mqtt_host = os.environ.get("MQTT_HOST", raw.get("mqtt_host", cfg.mqtt_host))
+        cfg.mqtt_port = int(os.environ.get("MQTT_PORT", raw.get("mqtt_port", cfg.mqtt_port)))
+        cfg.mqtt_user = os.environ.get("MQTT_USER", raw.get("mqtt_user", "")) or ""
+        cfg.mqtt_pass = os.environ.get("MQTT_PASS", raw.get("mqtt_pass", "")) or ""
+        cfg.mqtt_tls = bool(raw.get("mqtt_tls", False))
+        cfg.topic_prefix = raw.get("topic_prefix", cfg.topic_prefix)
+        cfg.discovery_prefix = raw.get("discovery_prefix", cfg.discovery_prefix)
+        cfg.enable_discovery = bool(raw.get("enable_discovery", True))
+        cfg.poll_interval = int(raw.get("poll_interval", cfg.poll_interval))
+        cfg.log_level = raw.get("log_level", cfg.log_level)
+        return cfg
 
-def state_topic(prefix, serial): return f"{prefix}/{serial}/state"
-def avail_topic(prefix, serial): return f"{prefix}/{serial}/availability"
-def cmd_topic(prefix, serial, attr): return f"{prefix}/{serial}/set/{attr}"
-def attr_topic(prefix, serial, attr): return f"{prefix}/{serial}/{attr}"
+    @classmethod
+    def from_env(cls) -> "BridgeConfig":
+        cfg = cls()
+        cfg.username = os.environ.get("AMBIENTIKA_USER", "")
+        cfg.password = os.environ.get("AMBIENTIKA_PASS", "")
+        cfg.host = os.environ.get("AMBIENTIKA_HOST", cfg.host)
+        cfg.mqtt_host = os.environ.get("MQTT_HOST", cfg.mqtt_host)
+        cfg.mqtt_port = int(os.environ.get("MQTT_PORT", cfg.mqtt_port))
+        cfg.mqtt_user = os.environ.get("MQTT_USER", "")
+        cfg.mqtt_pass = os.environ.get("MQTT_PASS", "")
+        return cfg
 
 
-def build_discovery_configs(cfg, serial, device_name):
-    device_info = {"identifiers": [serial], "name": device_name,
-                   "manufacturer": "Ambientika / SUEDWIND", "model": "Smart Ventilation Unit"}
+# ---------------------------------------------------------------------------
+# Topic helpers
+# ---------------------------------------------------------------------------
+
+def state_topic(prefix: str, serial: str) -> str:
+    return f"{prefix}/{serial}/state"
+
+
+def avail_topic(prefix: str, serial: str) -> str:
+    return f"{prefix}/{serial}/availability"
+
+
+def cmd_topic(prefix: str, serial: str, attr: str) -> str:
+    return f"{prefix}/{serial}/set/{attr}"
+
+
+# ---------------------------------------------------------------------------
+# Home Assistant Auto-Discovery
+# ---------------------------------------------------------------------------
+
+def build_discovery_configs(cfg: BridgeConfig, serial: str, device_name: str):
+    device_info = {
+        "identifiers": [serial],
+        "name": device_name,
+        "manufacturer": "Ambientika / SUEDWIND",
+        "model": "Smart Ventilation Unit",
+    }
     base = cfg.discovery_prefix
     prefix = cfg.topic_prefix
     avail = avail_topic(prefix, serial)
     state = state_topic(prefix, serial)
+
     entities = []
-    for key, name, unit, dc, icon in [
-        ("temperature","Temperature","\u00b0C","temperature",None),
-        ("humidity","Humidity","%","humidity",None),
-        ("air_quality","Air Quality",None,None,"mdi:air-filter"),
-        ("filters_status","Filter Status",None,None,"mdi:air-filter"),
-        ("operating_mode","Mode",None,None,"mdi:fan"),
-        ("fan_speed","Fan Speed",None,None,"mdi:speedometer"),
-        ("humidity_level","Humidity Level",None,None,"mdi:water-percent"),
-        ("device_role","Device Role",None,None,"mdi:information"),
-    ]:
-        p = {"name":name,"unique_id":f"ambientika_{serial}_{key}",
-             "state_topic":state,"value_template":f"{{{{ value_json.{key} }}}}",
-             "availability_topic":avail,"device":device_info}
-        if unit: p["unit_of_measurement"] = unit
-        if dc: p["device_class"] = dc
-        if icon: p["icon"] = icon
+
+    sensor_defs = [
+        ("temperature", "Temperature", "\u00b0C", "temperature", None),
+        ("humidity", "Humidity", "%", "humidity", None),
+        ("air_quality", "Air Quality", None, None, "mdi:air-filter"),
+        ("filters_status", "Filter Status", None, None, "mdi:air-filter"),
+        ("operating_mode", "Mode", None, None, "mdi:fan"),
+        ("fan_speed", "Fan Speed", None, None, "mdi:speedometer"),
+        ("humidity_level", "Humidity Level", None, None, "mdi:water-percent"),
+        ("light_sensor_level", "Light Sensor Level", None, None, "mdi:brightness-5"),
+        ("device_role", "Device Role", None, None, "mdi:information"),
+    ]
+    for key, name, unit, dc, icon in sensor_defs:
+        p = {
+            "name": name,
+            "unique_id": f"ambientika_{serial}_{key}",
+            "state_topic": state,
+            "value_template": f"{{{{ value_json.{key} }}}}",
+            "availability_topic": avail,
+            "device": device_info,
+        }
+        if unit:
+            p["unit_of_measurement"] = unit
+        if dc:
+            p["device_class"] = dc
+        if icon:
+            p["icon"] = icon
         entities.append((f"{base}/sensor/{serial}_{key}/config", p))
-    for key, name, dc in [("humidity_alarm","Humidity Alarm","moisture"),("night_alarm","Night Alarm","problem")]:
-        p = {"name":name,"unique_id":f"ambientika_{serial}_{key}",
-             "state_topic":state,"value_template":f"{{{{ value_json.{key} }}}}",
-             "payload_on":"True","payload_off":"False","availability_topic":avail,"device":device_info,"device_class":dc}
+
+    bin_defs = [
+        ("humidity_alarm", "Humidity Alarm", "moisture"),
+        ("night_alarm", "Night Alarm", "problem"),
+    ]
+    for key, name, dc in bin_defs:
+        p = {
+            "name": name,
+            "unique_id": f"ambientika_{serial}_{key}",
+            "state_topic": state,
+            "value_template": f"{{{{ value_json.{key} }}}}",
+            "payload_on": "True",
+            "payload_off": "False",
+            "availability_topic": avail,
+            "device": device_info,
+            "device_class": dc,
+        }
         entities.append((f"{base}/binary_sensor/{serial}_{key}/config", p))
-    for key, name, opts, icon in [
-        ("operating_mode","Mode",[m.value for m in OperatingMode],"mdi:fan"),
-        ("fan_speed","Fan Speed",[s.value for s in FanSpeed],"mdi:speedometer"),
-        ("humidity_level","Humidity Level",[h.value for h in HumidityLevel],"mdi:water-percent"),
-    ]:
-        p = {"name":name,"unique_id":f"ambientika_{serial}_{key}_select",
-             "state_topic":state,"value_template":f"{{{{ value_json.{key} }}}}",
-             "command_topic":cmd_topic(prefix,serial,key),"options":opts,
-             "availability_topic":avail,"device":device_info,"icon":icon}
+
+    select_defs = [
+        ("operating_mode", "Mode", [m.name for m in OperatingMode], "mdi:fan"),
+        ("fan_speed", "Fan Speed", [s.name for s in FanSpeed], "mdi:speedometer"),
+        ("humidity_level", "Humidity Level", [h.name for h in HumidityLevel], "mdi:water-percent"),
+        ("light_sensor_level", "Light Sensor Level", [l.name for l in LightSensorLevel], "mdi:brightness-5"),
+    ]
+    for key, name, opts, icon in select_defs:
+        p = {
+            "name": name,
+            "unique_id": f"ambientika_{serial}_{key}_select",
+            "state_topic": state,
+            "value_template": f"{{{{ value_json.{key} }}}}",
+            "command_topic": cmd_topic(prefix, serial, key),
+            "options": opts,
+            "availability_topic": avail,
+            "device": device_info,
+            "icon": icon,
+        }
         entities.append((f"{base}/select/{serial}_{key}/config", p))
+
     return entities
 
 
-class Ambientikabridge:
-    def __init__(self, cfg: BridgeConfig):
+# ---------------------------------------------------------------------------
+# Bridge
+# ---------------------------------------------------------------------------
+
+class AmbientikaBridge:
+    def __init__(self, cfg: BridgeConfig) -> None:
         self.cfg = cfg
-        self.api: Optional[AmbientikaAPI] = None
-        self.devices = []
-        self._running = False
-        self._mqtt_connected = False
-        self._fail_count = {}
-        self.mqttc = mqtt.Client(client_id=cfg.mqtt_client_id, protocol=mqtt.MQTTv5)
-        if cfg.mqtt_user:
-            self.mqttc.username_pw_set(cfg.mqtt_user, cfg.mqtt_pass)
-        if cfg.mqtt_tls:
-            self.mqttc.tls_set()
-        self.mqttc.on_connect = self._on_connect
-        self.mqttc.on_disconnect = self._on_disconnect
-        self.mqttc.on_message = self._on_message
-        self.mqttc.will_set(f"{cfg.topic_prefix}/bridge/availability", "offline", qos=1, retain=True)
+        self.client: Optional[mqtt.Client] = None
+        self.api: Optional[Ambientika] = None
+        self.devices: dict = {}
+        self.loop: Optional[asyncio.AbstractEventLoop] = None
+        self._stop_event: Optional[asyncio.Event] = None
 
-    def _on_connect(self, client, userdata, flags, rc, props=None):
+    # ----- MQTT -----
+    def _mqtt_connect(self) -> None:
+        self.client = mqtt.Client(client_id=self.cfg.mqtt_client_id, clean_session=True)
+        if self.cfg.mqtt_user:
+            self.client.username_pw_set(self.cfg.mqtt_user, self.cfg.mqtt_pass)
+        if self.cfg.mqtt_tls:
+            self.client.tls_set()
+        self.client.on_connect = self._on_mqtt_connect
+        self.client.on_message = self._on_mqtt_message
+        log.info("Connecting to MQTT broker %s:%s ...", self.cfg.mqtt_host, self.cfg.mqtt_port)
+        self.client.connect(self.cfg.mqtt_host, self.cfg.mqtt_port, keepalive=60)
+        self.client.loop_start()
+
+    def _on_mqtt_connect(self, client, userdata, flags, rc) -> None:
         if rc == 0:
-            log.info("MQTT connected")
-            self._mqtt_connected = True
-            for dev in self.devices:
-                for attr in ("operating_mode", "fan_speed", "humidity_level"):
-                    client.subscribe(cmd_topic(self.cfg.topic_prefix, dev.serial_number, attr))
-            client.publish(f"{self.cfg.topic_prefix}/bridge/availability", "online", qos=1, retain=True)
+            log.info("Connected to MQTT broker.")
+            for serial in self.devices:
+                topic = f"{self.cfg.topic_prefix}/{serial}/set/+"
+                client.subscribe(topic)
+                log.debug("Subscribed to %s", topic)
         else:
-            log.error("MQTT connect failed rc=%s", rc)
+            log.error("MQTT connection failed (rc=%s).", rc)
 
-    def _on_disconnect(self, client, userdata, rc, props=None):
-        log.warning("MQTT disconnected rc=%s", rc)
-        self._mqtt_connected = False
+    def _on_mqtt_message(self, client, userdata, msg) -> None:
+        try:
+            parts = msg.topic.split("/")
+            if len(parts) < 4 or parts[-2] != "set":
+                return
+            serial = parts[-3]
+            attr = parts[-1]
+            payload = msg.payload.decode("utf-8", errors="replace").strip()
+            log.info("Command received: serial=%s attr=%s value=%s", serial, attr, payload)
+            if self.loop is not None:
+                asyncio.run_coroutine_threadsafe(
+                    self._handle_command(serial, attr, payload), self.loop
+                )
+        except Exception as e:
+            log.exception("Error handling MQTT message: %s", e)
 
-    def _on_message(self, client, userdata, msg):
-        topic = msg.topic
-        payload = msg.payload.decode("utf-8", errors="replace").strip()
-        for dev in self.devices:
-            for attr in ("operating_mode", "fan_speed", "humidity_level"):
-                if topic == cmd_topic(self.cfg.topic_prefix, dev.serial_number, attr):
-                    asyncio.run_coroutine_threadsafe(self._apply_command(dev, attr, payload), self._loop)
+    async def _handle_command(self, serial: str, attr: str, value: str) -> None:
+        device = self.devices.get(serial)
+        if device is None:
+            log.warning("Unknown device serial: %s", serial)
+            return
 
-    async def _apply_command(self, dev, attr, value):
+        status_res = await device.status()
+        if isinstance(status_res, Failure):
+            log.error("Cannot read current status of %s: %s", serial, status_res)
+            return
+        status = status_res.unwrap()
+
+        op = status["operating_mode"]
+        fan = status["fan_speed"]
+        hum = status["humidity_level"]
+        light = status["light_sensor_level"]
+
         try:
             if attr == "operating_mode":
-                await dev.change_mode(operating_mode=OperatingMode(value))
+                op = OperatingMode[value]
             elif attr == "fan_speed":
-                await dev.change_mode(fan_speed=FanSpeed(value))
+                fan = FanSpeed[value]
             elif attr == "humidity_level":
-                await dev.change_mode(humidity_level=HumidityLevel(value))
-            log.info("Applied %s=%s to %s", attr, value, dev.serial_number)
-            await asyncio.sleep(1)
-            await self._poll_device(dev)
-        except Exception as e:
-            log.error("Command failed: %s", e)
-
-    async def _poll_device(self, dev):
-        serial = dev.serial_number
-        try:
-            status = await dev.get_status()
-            payload = {}
-            for k in ("temperature","humidity","air_quality","filters_status","operating_mode",
-                      "fan_speed","humidity_level","device_role","humidity_alarm","night_alarm"):
-                v = getattr(status, k, None)
-                payload[k] = v.value if hasattr(v, "value") else str(v) if v is not None else ""
-            self._fail_count[serial] = 0
-            self.mqttc.publish(state_topic(self.cfg.topic_prefix, serial), json.dumps(payload), qos=0, retain=True)
-            for k, v in payload.items():
-                self.mqttc.publish(attr_topic(self.cfg.topic_prefix, serial, k), str(v), qos=0, retain=True)
-            self.mqttc.publish(avail_topic(self.cfg.topic_prefix, serial), "online", qos=1, retain=True)
-        except Exception as e:
-            self._fail_count[serial] = self._fail_count.get(serial, 0) + 1
-            log.warning("Poll failed for %s (%d): %s", serial, self._fail_count[serial], e)
-            if self._fail_count[serial] >= 3:
-                await self._re_auth()
-
-    async def _re_auth(self):
-        try:
-            await self.api.login(self.cfg.username, self.cfg.password)
-            self.devices = await self.api.get_devices()
-            log.info("Re-auth OK, %d devices", len(self.devices))
-        except Exception as e:
-            log.error("Re-auth failed: %s", e)
-
-    def _publish_discovery(self):
-        if not self.cfg.enable_discovery:
+                hum = HumidityLevel[value]
+            elif attr == "light_sensor_level":
+                light = LightSensorLevel[value]
+            else:
+                log.warning("Unsupported attribute: %s", attr)
+                return
+        except KeyError:
+            log.error("Invalid value %r for %s", value, attr)
             return
-        for dev in self.devices:
-            serial = dev.serial_number
-            name = getattr(dev, "name", serial) or serial
-            for topic, payload in build_discovery_configs(self.cfg, serial, name):
-                self.mqttc.publish(topic, json.dumps(payload), qos=1, retain=True)
 
-    async def run(self):
-        logging.basicConfig(level=getattr(logging, self.cfg.log_level.upper(), logging.INFO),
-                            format="%(asctime)s %(levelname)-8s %(name)s: %(message)s")
-        log.info("Ambientika MQTT Bridge starting...")
-        self._loop = asyncio.get_event_loop()
-        self.api = AmbientikaAPI(host=self.cfg.host)
-        await self.api.login(self.cfg.username, self.cfg.password)
-        self.devices = await self.api.get_devices()
-        log.info("Found %d device(s)", len(self.devices))
-        self.mqttc.connect_async(self.cfg.mqtt_host, self.cfg.mqtt_port)
-        self.mqttc.loop_start()
-        for _ in range(30):
-            if self._mqtt_connected:
-                break
-            await asyncio.sleep(1)
-        if not self._mqtt_connected:
-            log.error("MQTT connect timeout")
-            sys.exit(1)
+        mode = {
+            "operating_mode": op,
+            "fan_speed": fan,
+            "humidity_level": hum,
+            "light_sensor_level": light,
+        }
+        res = await device.change_mode(mode)
+        if isinstance(res, Failure):
+            log.error("change_mode failed for %s: %s", serial, res)
+        else:
+            log.info("change_mode OK for %s", serial)
+
+    # ----- Ambientika -----
+    async def _login(self) -> None:
+        log.info("Authenticating with Ambientika API at %s ...", self.cfg.host)
+        res = await authenticate(self.cfg.username, self.cfg.password, self.cfg.host)
+        if isinstance(res, Failure):
+            log.error("Authentication failed: %s", res)
+            raise RuntimeError("Cannot authenticate with Ambientika API. Check username/password.")
+        self.api = res.unwrap()
+        log.info("Authentication successful.")
+
+    async def _discover_devices(self) -> None:
+        assert self.api is not None
+        houses_res = await self.api.houses()
+        if isinstance(houses_res, Failure):
+            log.error("Could not fetch houses: %s", houses_res)
+            raise RuntimeError("Could not fetch houses from Ambientika API.")
+        houses = houses_res.unwrap()
+
+        self.devices = {}
+        for house in houses:
+            for room in house.rooms:
+                for device in room.devices:
+                    self.devices[device.serial_number] = device
+                    log.info("  Device: %s (serial: %s)", device.name, device.serial_number)
+
+        log.info("Found %d device(s).", len(self.devices))
+
+    def _publish_discovery(self) -> None:
+        if not self.cfg.enable_discovery or self.client is None:
+            return
+        for serial, device in self.devices.items():
+            for topic, payload in build_discovery_configs(self.cfg, serial, device.name):
+                self.client.publish(topic, json.dumps(payload), qos=0, retain=True)
+        log.info("HA Auto-Discovery published for all devices.")
+
+    async def _poll_loop(self) -> None:
+        assert self._stop_event is not None
+        while not self._stop_event.is_set():
+            for serial, device in list(self.devices.items()):
+                try:
+                    res = await device.status()
+                    if isinstance(res, Failure):
+                        log.warning("status() failed for %s: %s", serial, res)
+                        if self.client is not None:
+                            self.client.publish(
+                                avail_topic(self.cfg.topic_prefix, serial),
+                                "offline",
+                                qos=0,
+                                retain=True,
+                            )
+                        continue
+                    s = res.unwrap()
+                    payload = {
+                        "operating_mode": s["operating_mode"].name,
+                        "fan_speed": s["fan_speed"].name,
+                        "humidity_level": s["humidity_level"].name,
+                        "light_sensor_level": s["light_sensor_level"].name,
+                        "temperature": s["temperature"],
+                        "humidity": s["humidity"],
+                        "air_quality": s["air_quality"],
+                        "humidity_alarm": s["humidity_alarm"],
+                        "filters_status": s["filters_status"],
+                        "night_alarm": s["night_alarm"],
+                        "device_role": s["device_role"],
+                    }
+                    if self.client is not None:
+                        self.client.publish(
+                            state_topic(self.cfg.topic_prefix, serial),
+                            json.dumps(payload),
+                            qos=0,
+                            retain=True,
+                        )
+                        self.client.publish(
+                            avail_topic(self.cfg.topic_prefix, serial),
+                            "online",
+                            qos=0,
+                            retain=True,
+                        )
+                except Exception as e:
+                    log.exception("Error polling %s: %s", serial, e)
+
+            try:
+                await asyncio.wait_for(
+                    self._stop_event.wait(), timeout=self.cfg.poll_interval
+                )
+            except asyncio.TimeoutError:
+                pass
+
+    async def run(self) -> None:
+        self.loop = asyncio.get_running_loop()
+        self._stop_event = asyncio.Event()
+
+        await self._login()
+        await self._discover_devices()
+        self._mqtt_connect()
+        if self.client is not None:
+            for serial in self.devices:
+                self.client.subscribe(f"{self.cfg.topic_prefix}/{serial}/set/+")
         self._publish_discovery()
-        self._running = True
-        while self._running:
-            for dev in self.devices:
-                await self._poll_device(dev)
-            await asyncio.sleep(self.cfg.poll_interval)
 
-    def stop(self):
-        log.info("Stopping bridge...")
-        self._running = False
-        self.mqttc.publish(f"{self.cfg.topic_prefix}/bridge/availability", "offline", qos=1, retain=True)
-        self.mqttc.disconnect()
-        self.mqttc.loop_stop()
+        log.info("Starting poll loop (every %ss) ...", self.cfg.poll_interval)
+        await self._poll_loop()
+
+    def stop(self) -> None:
+        log.info("Shutting down ...")
+        if self._stop_event is not None and self.loop is not None:
+            self.loop.call_soon_threadsafe(self._stop_event.set)
+        if self.client is not None:
+            try:
+                self.client.loop_stop()
+                self.client.disconnect()
+            except Exception:
+                pass
 
 
-def main():
-    config_path = os.environ.get("CONFIG_PATH", "config.yaml")
-    if not os.path.exists(config_path):
-        print(f"Config not found: {config_path}")
-        print("Copy config.example.yaml to config.yaml and fill in your credentials.")
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+def load_config() -> BridgeConfig:
+    """Load configuration from Home Assistant options, YAML or environment."""
+    ha_options = "/data/options.json"
+    yaml_path = os.environ.get("CONFIG_YAML", "config.yaml")
+    if os.path.exists(ha_options):
+        return BridgeConfig.from_ha_options(ha_options)
+    if os.path.exists(yaml_path):
+        return BridgeConfig.from_yaml(yaml_path)
+    return BridgeConfig.from_env()
+
+
+def main() -> None:
+    cfg = load_config()
+
+    logging.basicConfig(
+        level=getattr(logging, str(cfg.log_level).upper(), logging.INFO),
+        format="%(asctime)s %(levelname)-7s %(message)s",
+    )
+    log.info("=== Ambientika MQTT Bridge v1.2.0 starting ===")
+    log.info("API host      : %s", cfg.host)
+    log.info("MQTT broker   : %s:%s", cfg.mqtt_host, cfg.mqtt_port)
+    log.info("Topic prefix  : %s", cfg.topic_prefix)
+    log.info("Poll interval : %ss", cfg.poll_interval)
+
+    if not cfg.username or not cfg.password:
+        log.error("Ambientika username/password missing. Set them in the add-on options or config.yaml.")
         sys.exit(1)
-    cfg = BridgeConfig.from_yaml(config_path)
-    bridge = Ambientikabridge(cfg)
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        try:
-            loop.add_signal_handler(sig, bridge.stop)
-        except (NotImplementedError, RuntimeError):
-            pass
+
+    bridge = AmbientikaBridge(cfg)
+
+    def _handle_signal(*_):
+        bridge.stop()
+
+    signal.signal(signal.SIGTERM, _handle_signal)
+    signal.signal(signal.SIGINT, _handle_signal)
+
     try:
-        loop.run_until_complete(bridge.run())
+        asyncio.run(bridge.run())
     except KeyboardInterrupt:
         bridge.stop()
-    finally:
-        loop.close()
+    except Exception as e:
+        log.exception("Fatal error: %s", e)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

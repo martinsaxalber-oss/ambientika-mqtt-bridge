@@ -9,12 +9,21 @@ LABEL \
   io.hass.version="${BUILD_VERSION}" \
   maintainer="Ambientika / SUEDWIND"
 
-# Install Python dependencies
-RUN apk add --no-cache python3 py3-pip
+# Install Python plus build tools needed for aiohttp / yarl / multidict on ARM
+RUN apk add --no-cache \
+      python3 \
+      py3-pip \
+      gcc \
+      musl-dev \
+      python3-dev \
+      libffi-dev \
+      openssl-dev \
+      cargo \
+      make
 
-# Install bridge dependencies
+# Install bridge dependencies (PEP 668: system Python is externally managed)
 COPY requirements.txt /tmp/requirements.txt
-RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
+RUN pip3 install --no-cache-dir --break-system-packages -r /tmp/requirements.txt
 
 # Copy bridge script
 COPY bridge.py /app/bridge.py

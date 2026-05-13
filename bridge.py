@@ -45,6 +45,15 @@ log = logging.getLogger("ambientika_bridge")
 # Configuration
 # ---------------------------------------------------------------------------
 
+def _env(*names: str, default: str = "") -> str:
+    """Return the first non-empty env var among 'names'."""
+    for n in names:
+        v = os.environ.get(n)
+        if v:
+            return v
+    return default
+
+
 class BridgeConfig:
     def __init__(self) -> None:
         self.username = ""
@@ -64,6 +73,50 @@ class BridgeConfig:
         self.poll_interval = 30
         self.log_level = "INFO"
 
+    def apply_env_overrides(self) -> None:
+        """Override any field with matching env vars (HA add-on uses these)."""
+        u = _env("AMBIENTIKA_USERNAME", "AMBIENTIKA_USER")
+        if u:
+            self.username = u
+        p = _env("AMBIENTIKA_PASSWORD", "AMBIENTIKA_PASS")
+        if p:
+            self.password = p
+        h = _env("AMBIENTIKA_HOST")
+        if h:
+            self.host = h
+
+        mh = _env("MQTT_HOST")
+        if mh:
+            self.mqtt_host = mh
+        mp = _env("MQTT_PORT")
+        if mp:
+            try:
+                self.mqtt_port = int(mp)
+            except ValueError:
+                pass
+        mu = _env("MQTT_USERNAME", "MQTT_USER")
+        if mu:
+            self.mqtt_user = mu
+        mpw = _env("MQTT_PASSWORD", "MQTT_PASS")
+        if mpw:
+            self.mqtt_pass = mpw
+
+        tp = _env("MQTT_TOPIC_PREFIX", "TOPIC_PREFIX")
+        if tp:
+            self.topic_prefix = tp
+        dp = _env("DISCOVERY_PREFIX")
+        if dp:
+            self.discovery_prefix = dp
+        pi = _env("POLL_INTERVAL")
+        if pi:
+            try:
+                self.poll_interval = int(pi)
+            except ValueError:
+                pass
+        ll = _env("LOG_LEVEL")
+        if ll:
+            self.log_level = ll
+
     @classmethod
     def from_yaml(cls, path: str) -> "BridgeConfig":
         with open(path) as f:
@@ -71,15 +124,15 @@ class BridgeConfig:
         cfg = cls()
 
         amb = raw.get("ambientika", {}) or {}
-        cfg.username = os.environ.get("AMBIENTIKA_USER", amb.get("username", "")) or ""
-        cfg.password = os.environ.get("AMBIENTIKA_PASS", amb.get("password", "")) or ""
+        cfg.username = amb.get("username", "") or ""
+        cfg.password = amb.get("password", "") or ""
         cfg.host = amb.get("host", cfg.host)
 
         mq = raw.get("mqtt", {}) or {}
-        cfg.mqtt_host = os.environ.get("MQTT_HOST", mq.get("host", cfg.mqtt_host))
-        cfg.mqtt_port = int(os.environ.get("MQTT_PORT", mq.get("port", cfg.mqtt_port)))
-        cfg.mqtt_user = os.environ.get("MQTT_USER", mq.get("username", "")) or ""
-        cfg.mqtt_pass = os.environ.get("MQTT_PASS", mq.get("password", "")) or ""
+        cfg.mqtt_host = mq.get("host", cfg.mqtt_host)
+        cfg.mqtt_port = int(mq.get("port", cfg.mqtt_port))
+        cfg.mqtt_user = mq.get("username", "") or ""
+        cfg.mqtt_pass = mq.get("password", "") or ""
         cfg.mqtt_tls = bool(mq.get("tls", False))
 
         br = raw.get("bridge", {}) or {}
@@ -88,38 +141,36 @@ class BridgeConfig:
         cfg.enable_discovery = bool(br.get("enable_discovery", True))
         cfg.poll_interval = int(br.get("poll_interval", cfg.poll_interval))
         cfg.log_level = br.get("log_level", cfg.log_level)
+
+        cfg.apply_env_overrides()
         return cfg
 
     @classmethod
     def from_ha_options(cls, path: str) -> "BridgeConfig":
+        """Read /data/options.json written by Home Assistant Supervisor."""
         with open(path) as f:
             raw = json.load(f)
         cfg = cls()
-        cfg.username = os.environ.get("AMBIENTIKA_USER", raw.get("ambientika_user", "")) or ""
-        cfg.password = os.environ.get("AMBIENTIKA_PASS", raw.get("ambientika_pass", "")) or ""
+        cfg.username = raw.get("ambientika_username", raw.get("ambientika_user", "")) or ""
+        cfg.password = raw.get("ambientika_password", raw.get("ambientika_pass", "")) or ""
         cfg.host = raw.get("ambientika_host", cfg.host)
-        cfg.mqtt_host = os.environ.get("MQTT_HOST", raw.get("mqtt_host", cfg.mqtt_host))
-        cfg.mqtt_port = int(os.environ.get("MQTT_PORT", raw.get("mqtt_port", cfg.mqtt_port)))
-        cfg.mqtt_user = os.environ.get("MQTT_USER", raw.get("mqtt_user", "")) or ""
-        cfg.mqtt_pass = os.environ.get("MQTT_PASS", raw.get("mqtt_pass", "")) or ""
+        cfg.mqtt_host = raw.get("mqtt_host", cfg.mqtt_host)
+        cfg.mqtt_port = int(raw.get("mqtt_port", cfg.mqtt_port))
+        cfg.mqtt_user = raw.get("mqtt_username", raw.get("mqtt_user", "")) or ""
+        cfg.mqtt_pass = raw.get("mqtt_password", raw.get("mqtt_pass", "")) or ""
         cfg.mqtt_tls = bool(raw.get("mqtt_tls", False))
-        cfg.topic_prefix = raw.get("topic_prefix", cfg.topic_prefix)
+        cfg.topic_prefix = raw.get("mqtt_topic_prefix", raw.get("topic_prefix", cfg.topic_prefix))
         cfg.discovery_prefix = raw.get("discovery_prefix", cfg.discovery_prefix)
         cfg.enable_discovery = bool(raw.get("enable_discovery", True))
         cfg.poll_interval = int(raw.get("poll_interval", cfg.poll_interval))
         cfg.log_level = raw.get("log_level", cfg.log_level)
+        cfg.apply_env_overrides()
         return cfg
 
     @classmethod
     def from_env(cls) -> "BridgeConfig":
         cfg = cls()
-        cfg.username = os.environ.get("AMBIENTIKA_USER", "")
-        cfg.password = os.environ.get("AMBIENTIKA_PASS", "")
-        cfg.host = os.environ.get("AMBIENTIKA_HOST", cfg.host)
-        cfg.mqtt_host = os.environ.get("MQTT_HOST", cfg.mqtt_host)
-        cfg.mqtt_port = int(os.environ.get("MQTT_PORT", cfg.mqtt_port))
-        cfg.mqtt_user = os.environ.get("MQTT_USER", "")
-        cfg.mqtt_pass = os.environ.get("MQTT_PASS", "")
+        cfg.apply_env_overrides()
         return cfg
 
 

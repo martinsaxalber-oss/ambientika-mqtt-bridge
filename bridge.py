@@ -16,8 +16,15 @@ import paho.mqtt.client as mqtt
 import yaml
 
 try:
-    from ambientika_py import AmbientikaAPI, Device
-    from ambientika_py.models import OperatingMode, FanSpeed, HumidityLevel
+    from ambientika_py import (
+        AmbientikaAPI,
+        Device,
+    )
+    from ambientika_py.models import (
+        OperatingMode,
+        FanSpeed,
+        HumidityLevel,
+    )
 except ImportError:
     print("ERROR: ambientika_py not installed. Run: pip install ambientika_py")
     sys.exit(1)

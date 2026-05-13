@@ -132,6 +132,14 @@ See [`iobroker-adapter/README.md`](iobroker-adapter/README.md)
 
 ---
 
+## Notes
+
+### `ambientika_py` dependency
+
+This project currently installs the [`ambientika_py`](https://github.com/wingertge/ambientika-py) library directly from its upstream Git repository, pinned to a specific commit, because the latest PyPI release (0.0.5) does not yet contain the `LightSensorLevel` enum required by the bridge. This is a temporary workaround – see [#3](https://github.com/ambientika-eu/ambientika-mqtt-bridge/issues/3) and [wingertge/ambientika-py#8](https://github.com/wingertge/ambientika-py/issues/8) for tracking. Building from source therefore requires `git` to be available inside the build environment (already handled in the provided `Dockerfile`s).
+
+---
+
 ## License
 
 MIT License – © Ambientika / SUEDWIND

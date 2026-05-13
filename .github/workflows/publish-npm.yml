@@ -1,14 +1,14 @@
 name: Publish homebridge-ambientika to npm
 
-# Trigger: when a version tag is pushed (e.g. homebridge-v1.0.0)
+# Trigger: only when a homebridge-plugin version tag is pushed (e.g. homebridge-v1.0.1)
+# Bridge releases (v*) do NOT trigger this workflow.
 on:
   push:
     tags:
       - "homebridge-v*"
-      - "v*"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   publish:
@@ -27,15 +27,40 @@ jobs:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
+      - name: Read package version
+        id: pkg
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          NAME=$(node -p "require('./package.json').name")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "Package: $NAME@$VERSION"
+
+      - name: Check if version already published on npm
+        id: check
+        run: |
+          NAME='${{ steps.pkg.outputs.name }}'
+          VERSION='${{ steps.pkg.outputs.version }}'
+          if npm view "$NAME@$VERSION" version > /dev/null 2>&1; then
+            echo "Version $NAME@$VERSION already exists on npm. Skipping publish."
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Version $NAME@$VERSION is new. Will publish."
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Install dependencies
+        if: steps.check.outputs.should_publish == 'true'
         run: npm install
 
       - name: Verify package
+        if: steps.check.outputs.should_publish == 'true'
         run: npm publish --dry-run
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish to npm
+        if: steps.check.outputs.should_publish == 'true'
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

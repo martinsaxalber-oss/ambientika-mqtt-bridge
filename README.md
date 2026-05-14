@@ -123,12 +123,14 @@ See [`iobroker-adapter/README.md`](iobroker-adapter/README.md)
 | `AMBIENTIKA_PASSWORD` | — | Ambientika account password |
 | `MQTT_BROKER` | `localhost` | MQTT broker host |
 | `MQTT_PORT` | `1883` | MQTT broker port |
-| `MQTT_USER` | *(empty)* | MQTT username |
-| `MQTT_PASSWORD` | *(empty)* | MQTT password |
+| `MQTT_USER` | *(empty)* | MQTT username (**required** for most brokers) |
+| `MQTT_PASSWORD` | *(empty)* | MQTT password (**required** for most brokers) |
 | `MQTT_PREFIX` | `ambientika` | MQTT topic prefix |
 | `POLL_INTERVAL` | `30` | Device poll interval in seconds |
 | `HA_DISCOVERY` | `true` | Enable Home Assistant Auto-Discovery |
 | `LOG_LEVEL` | `INFO` | Logging level |
+
+> **MQTT credentials are required for most brokers.** The official Home Assistant Mosquitto add-on and most production setups disable anonymous MQTT access. If `MQTT_USER` / `MQTT_PASSWORD` are empty the bridge will fail to connect with `Not authorized`. Create a dedicated MQTT user for the bridge (e.g. via the Mosquitto add-on's `logins` option) and set both variables.
 
 ---
 

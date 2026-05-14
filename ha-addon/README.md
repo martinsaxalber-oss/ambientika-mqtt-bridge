@@ -39,13 +39,15 @@ After installation, configure the add-on via the **Configuration** tab:
 | `ambientika_password` | Your Ambientika account password | *(required)* |
 | `mqtt_host` | MQTT broker hostname | `core-mosquitto` |
 | `mqtt_port` | MQTT broker port | `1883` |
-| `mqtt_username` | MQTT username (optional) | `` |
-| `mqtt_password` | MQTT password (optional) | `` |
+| `mqtt_username` | MQTT username (**required** for most brokers) | `` |
+| `mqtt_password` | MQTT password (**required** for most brokers) | `` |
 | `mqtt_topic_prefix` | MQTT topic prefix | `ambientika` |
 | `poll_interval` | Polling interval in seconds | `30` |
 | `log_level` | Log verbosity | `INFO` |
 
-**Note:** If you use the official **Mosquitto broker** add-on, the default `core-mosquitto` hostname works out of the box.
+> **MQTT credentials are required for most brokers.** The official Home Assistant Mosquitto add-on and most production setups disable anonymous MQTT access. If `mqtt_username` / `mqtt_password` are empty the bridge cannot connect (`Not authorized`). Create a dedicated MQTT user for the bridge (e.g. via the Mosquitto add-on's `logins` option) and set both fields. Only leave them empty if you have explicitly configured your broker to allow anonymous access.
+>
+> **Note:** If you use the official **Mosquitto broker** add-on, the default `core-mosquitto` hostname works out of the box.
 
 ---
 
@@ -149,5 +151,5 @@ See the [main README](../README.md#mqtt-topics) for the complete topic list.
 
 ## Support
 
-- GitHub Issues: https://github.com/martinsaxalber-oss/ambientika-mqtt-bridge/issues
+- GitHub Issues: https://github.com/ambientika-eu/ambientika-mqtt-bridge/issues
 - Ambientika website: https://www.ambientika.eu

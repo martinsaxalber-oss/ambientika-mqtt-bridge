@@ -6,6 +6,10 @@ ambientika:
 mqtt:
   host: "localhost"
   port: 1883
+  # MQTT credentials are required for most brokers (e.g. the official
+  # Home Assistant Mosquitto add-on disables anonymous access by default).
+  # Only leave these empty if your broker explicitly allows anonymous
+  # connections.
   username: ""
   password: ""
   tls: false

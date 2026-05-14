@@ -56,14 +56,16 @@ Add to your Homebridge `config.json`:
 }
 ```
 
+> **MQTT credentials are required for most brokers.** Most production setups (including the official Home Assistant Mosquitto add-on) disable anonymous MQTT access. If `mqttUsername` / `mqttPassword` are empty the plugin will not be able to subscribe to the bridge topics. Use the same MQTT user that the Ambientika MQTT Bridge uses to publish, or create a dedicated read-only user for the plugin.
+
 ### Configuration Options
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `mqttHost` | string | `localhost` | MQTT broker hostname or IP |
 | `mqttPort` | number | `1883` | MQTT broker port |
-| `mqttUsername` | string | `` | MQTT username (optional) |
-| `mqttPassword` | string | `` | MQTT password (optional) |
+| `mqttUsername` | string | `` | MQTT username (**required** for most brokers) |
+| `mqttPassword` | string | `` | MQTT password (**required** for most brokers) |
 | `topicPrefix` | string | `ambientika` | MQTT topic prefix (must match bridge config) |
 
 ## HomeKit Accessories
